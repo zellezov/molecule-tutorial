@@ -1,0 +1,8 @@
+---
+# vars file for python-test
+pkg_list: # packages to be installed
+  - httpd
+  - firewalld
+svc_list: # services to be started and enabled
+  - httpd
+  - firewalld

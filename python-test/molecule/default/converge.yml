@@ -1,0 +1,7 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: "Include python-test"
+      include_role:
+        name: "python-test"

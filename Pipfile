@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+wheel = "*"
+ansible = "*"
+molecule = {extras = ["docker"], version = "*"}
+pytest-testinfra = "*"
+ansible-lint = {extras = ["yamllint"], version = "*"}
+pylint = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.9"
+
+[pipenv]
+allow_prereleases = true

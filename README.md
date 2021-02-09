@@ -24,7 +24,29 @@ To execute tests in local docker container and in local k8s cluster, make sure y
 - python 3.9.1  (install Python 3.9.1 using [pyenv](https://realpython.com/intro-to-pyenv/#using-pyenv-to-install-python))
 - pipenv 2020.11.15  
 
-*In this tutorial the latest version of each component has been used (at the time of writing), exact version provided just for reference.*
+*In this tutorial the latest version of each component has been used (at the time of writing), the exact version provided just for reference.*
+
+## Prepare the environment
+
+In this tutorial I will use `pipenv` as virtual environment management tool. Feel free to choose your favourite tool instead.  
+
+Create virtual environment using `python 3.9.1` and activate created environment:
+```bash
+pipenv --python 3.9.1
+pipenv shell
+```
+
+Install all required packages for python example:
+```bash
+pipenv install wheel ansible "molecule[docker]" pylint pytest-testinfra "ansible-lint[yamllint]" --pre
+```
+- `wheel`: required for Ansible installation
+- `ansible`: because we are going to test Ansible roles
+- `molecule[docker]`: molecule package with plugin to support execution in docker
+- `pytest-testinfra`: testing framework we will use to write tests
+- `ansible-lint[yamllint]`: linter for ansible files, with plugin for linting `.yml` files
+- `pylint`: linter for python files
+- `--pre`: pipenv flag to allow pre-release version installation
 
 ## Prepare Ansible role for testing
 
@@ -45,8 +67,11 @@ Go to the created directory:
 cd python-test
 ```
 
-Now you see following file structure created automatically by Molecule:
+Now you see following default file structure created automatically by Molecule:
 ```bash
+/python-test
+├── .travis.yml
+├── .yamllint
 ├── README.md
 ├── defaults
 ├── files
@@ -61,13 +86,13 @@ Now you see following file structure created automatically by Molecule:
 
 Alternatively, you can initialize Molecule for existing Ansible role, running following command from within the role directory:
 ```bash
-molecule init scenario -r role-name -d docker
+molecule init scenario -r role-name
 ```
 
 ### Configure role
 
 Now it is necessary to configure packages and services that would be the subject of tests.  
-I have no idea why, but any centOS7 image other than [milcom/centos7-systemd](https://hub.docker.com/r/milcom/centos7-systemd) (used in DigitalOcean tutorial) had the problems with `systemd`, so it will be used in this tutorial as well.
+I have no idea why, but any centOS7 image other than [milcom/centos7-systemd](https://hub.docker.com/r/milcom/centos7-systemd) (as used in DigitalOcean tutorial) had the problems with `systemd`, so it will be used in this tutorial as well.
 
 #### Add vars
 
@@ -135,6 +160,114 @@ Now the role is created, and we can move on to configuring Molecule for testing.
 
 > With [Testinfra](https://testinfra.readthedocs.io/en/latest/) you can write unit tests in Python to test actual state of your servers configured by management tools like Salt, Ansible, Puppet, Chef and so on.  
 > Testinfra aims to be a Serverspec equivalent in python and is written as a plugin to the powerful Pytest test engine.  
+
+#### Setup Molecule for test execution using TestInfra
+
+Now we need to specify docker image, test executor and linters. To do that, modify the `molecule.yml` file:
+```yaml
+# ~/python-test/molecule/default/molecule.yml
+---
+dependency:
+  name: galaxy # default dependency manager
+driver:
+  name: docker # to execute tests in docker container
+platforms:
+  - name: centos7
+    image: milcom/centos7-systemd # specific docker image to be used
+    privileged: true
+provisioner:
+  name: ansible # default provisioner
+verifier:
+  name: testinfra # tests would be invoked by specified verifier
+lint: | # pipe needed here to provide list of linters to use
+  yamllint . 
+  ansible-lint .
+  pylint molecule/default/tests
+```
+Refer to Molecule [documentation](https://molecule.readthedocs.io/en/latest/configuration.html) for detailed description of all available parameters.  
+
+#### Add some tests
+
+Create new folder `tests` inside the `molecule` folder, and add two files: `__init__.py` and `test_default.py`:
+```bash
+molecule
+└── default
+    ├── converge.yml
+    ├── molecule.yml
+    ├── tests
+    │   ├── __init__.py
+    │   └── test_default.py
+    └── verify.yml
+```
+
+Add some tests to `test_default.py` file to check that ansible roles tasks have been executed successfully:  
+- packages are installed
+- services are started and enabled
+- server return specified template  
+
+```python
+import os
+import pytest
+
+import testinfra.utils.ansible_runner
+
+testinfra_hosts = testinfra.utils.ansible_runner.AnsibleRunner(
+    os.environ['MOLECULE_INVENTORY_FILE']).get_hosts('all')
+
+
+@pytest.mark.parametrize('pkg', [
+  'httpd',
+  'firewalld'
+])
+def test_pkg(host, pkg):
+    package = host.package(pkg)
+
+    assert package.is_installed
+
+
+@pytest.mark.parametrize('svc', [
+  'httpd',
+  'firewalld'
+])
+def test_svc(host, svc):
+    service = host.service(svc)
+
+    assert service.is_running
+    assert service.is_enabled
+
+
+@pytest.mark.parametrize('file, content', [
+  ("/etc/firewalld/zones/public.xml", "<service name=\"http\"/>"),
+  ("/var/www/html/index.html", "Managed by Ansible")
+])
+def test_files(host, file, content):
+    file = host.file(file)
+
+    assert file.exists
+    assert file.contains(content)
+```
+
+#### Running tests
+Now you can try to run tests:
+```bash
+molecule test
+```
+
+Most likely, the tests would fail for the first time. Check that all packages have been installed and none are missing, and fix linting errors (or turn linters off, which is an undesirable option). After that, try to run tests again. If you see `pytest` summary in output, this means it works:
+```bash
+INFO     Running default > verify
+INFO     Executing Testinfra tests found in /Users/zellezov/github/zellezov/molecule-tutorial/python-test/molecule/default/tests/...
+============================= test session starts ==============================
+platform darwin -- Python 3.9.1, pytest-6.2.2, py-1.10.0, pluggy-0.13.1
+rootdir: /Users/zellezov
+plugins: testinfra-6.1.0
+collected 6 items
+
+molecule/default/tests/test_default.py ......                            [100%]
+
+============================== 6 passed in 10.24s ==============================
+INFO     Verifier completed successfully.
+```
 
 ### GOSS tests
 

@@ -10,6 +10,7 @@ molecule = {extras = ["docker"], version = "*"}
 pytest-testinfra = "*"
 ansible-lint = {extras = ["yamllint"], version = "*"}
 pylint = "*"
+black = "*"
 
 [dev-packages]
 

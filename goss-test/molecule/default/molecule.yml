@@ -1,0 +1,19 @@
+---
+dependency:
+  name: galaxy # default dependency manager
+driver:
+  name: docker # to execute tests in docker container
+platforms:
+  - name: centos7
+    image: milcom/centos7-systemd # specific docker image to be used
+    pre_build_image: true
+    privileged: true
+provisioner:
+  name: ansible # default provisioner
+  log: true # log output needed to see GOSS execution results in log
+verifier:
+  name: goss # tests would be invoked by specified verifier
+lint:
+  | # pipe needed here to provide list of linters to use, only yaml linters needed for goss
+  yamllint .
+  ansible-lint .

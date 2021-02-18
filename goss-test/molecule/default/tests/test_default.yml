@@ -1,0 +1,25 @@
+---
+file:
+  "/etc/firewalld/zones/public.xml":
+    exists: true
+    contains: ['<service name="http"/>']
+  "/var/www/html/index.html":
+    exists: true
+    contains: ["Managed by Ansible"]
+  "/var/www/html":
+    exists: true
+    filetype: directory
+
+package:
+  httpd:
+    installed: true
+  firewalld:
+    installed: true
+
+service:
+  httpd:
+    enabled: true
+    running: true
+  firewalld:
+    enabled: true
+    running: true

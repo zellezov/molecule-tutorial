@@ -1,0 +1,7 @@
+warn_list:  # or 'skip_list' to silence them completely
+  - meta-incorrect  # meta/main.yml default values should be changed
+  - meta-no-info  # meta/main.yml should contain relevant info
+  - parser-error  # AnsibleParserError
+  - role-name  # Role name {0} does not match ``^[a-z][a-z0-9_]+$`` pattern
+  - experimental  # all rules tagged as experimental
+  - risky-file-permissions  # File permissions unset or incorrect

@@ -1,0 +1,11 @@
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: Install the package 'sudo' # it is important to install `sudo` before playing role
+      yum:
+        name: sudo
+        state: present
+    - name: "Include goss-test"
+      include_role:
+        name: "goss-test"

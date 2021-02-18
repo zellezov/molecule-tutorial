@@ -11,6 +11,7 @@ pytest-testinfra = "*"
 ansible-lint = {extras = ["yamllint"], version = "*"}
 pylint = "*"
 black = "*"
+molecule-goss = "*"
 
 [dev-packages]
 

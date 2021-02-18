@@ -79,6 +79,12 @@ pipenv install openshift
 
 _If some package installation fails, make sure it is not a beta package, otherwise add `--pre` flag to allow beta package installation._
 
+Additionally, install `ansible.posix` plugin to manage services with firewalld:
+
+```bash
+ansible-galaxy collection install ansible.posix
+```
+
 ## Prepare Ansible role for testing
 
 All examples will use the same Ansible role setup. The main difference would be the selection of testing framework and Molecule driver/verifier setup.  
@@ -157,21 +163,18 @@ These tasks would ensure all required packages and services are installed, confi
   yum:
     name: "{{ pkg_list }}"
     state: present
-
 - name: "Ensure latest index.html is present"
   template:
     src: index.html.j2
     dest: /var/www/html/index.html
-
 - name: "Ensure httpd service is started and enabled"
   service:
     name: "{{ item }}"
     state: started
     enabled: true
   with_items: "{{ svc_list }}"
-
 - name: "Whitelist http in firewalld"
-  firewalld:
+  ansible.posix.firewalld:
     service: http
     state: enabled
     permanent: true
@@ -382,6 +385,7 @@ Specify GOSS installation steps in `verify.yml` file:
 
 ```yml
 # ~/goss-test/molecule/default/verify.yml
+---
 - name: Verify
   hosts: all
   become: true
@@ -442,7 +446,7 @@ Create new folder `tests` inside the `molecule` folder, and add `test_default.ym
 file:
   "/etc/firewalld/zones/public.xml":
     exists: true
-    contains: ['<service name="http" />']
+    contains: ['<service name="http"/>']
   "/var/www/html/index.html":
     exists: true
     contains: ["Managed by Ansible"]
@@ -467,6 +471,43 @@ service:
 
 #### Running tests
 
+Again, you can run tests with:
+
+```bash
+molecule test
+```
+
+Check output for task `Execute Goss tests` (that's where test execution starts), and `Display details about the Goss results` (test results and duration are described here):
+
+```bash
+TASK [Execute Goss tests] ******************************************************
+changed: [centos7] => (item=/tmp/test_default.yml)
+
+TASK [Display details about the Goss results] **********************************
+ok: [centos7] => (item={'changed': True, 'end': '2021-02-18 19:22:35.311891', 'stdout': 'File: /etc/firewalld/zones/public.xml: exists: matches expectation: [true]\nFile: /etc/firewalld/zones/public.xml: contains: matches expectation: [<service name="http"/>]\nFile: /var/www/html/index.html: exists: matches expectation: [true]\nFile: /var/www/html/index.html: contains: matches expectation: [Managed by Ansible]\nFile: /var/www/html: exists: matches expectation: [true]\nFile: /var/www/html: filetype: matches expectation: ["directory"]\nService: httpd: enabled: matches expectation: [true]\nService: httpd: running: matches expectation: [true]\nService: firewalld: enabled: matches expectation: [true]\nService: firewalld: running: matches expectation: [true]\nPackage: firewalld: installed: matches expectation: [true]\nPackage: httpd: installed: matches expectation: [true]\n\n\nTotal Duration: 0.081s\nCount: 12, Failed: 0, Skipped: 0', 'cmd': ['/usr/local/bin/goss', '-g', '/tmp/test_default.yml', 'validate', '--format', 'documentation'], 'rc': 0, 'start': '2021-02-18 19:22:35.132367', 'stderr': '', 'delta': '0:00:00.179524', 'invocation': {'module_args': {'creates': None, 'executable': None, '_uses_shell': False, 'strip_empty_ends': True, '_raw_params': '/usr/local/bin/goss -g /tmp/test_default.yml validate --format documentation', 'removes': None, 'argv': None, 'warn': True, 'chdir': None, 'stdin_add_newline': True, 'stdin': None}}, 'stdout_lines': ['File: /etc/firewalld/zones/public.xml: exists: matches expectation: [true]', 'File: /etc/firewalld/zones/public.xml: contains: matches expectation: [<service name="http"/>]', 'File: /var/www/html/index.html: exists: matches expectation: [true]', 'File: /var/www/html/index.html: contains: matches expectation: [Managed by Ansible]', 'File: /var/www/html: exists: matches expectation: [true]', 'File: /var/www/html: filetype: matches expectation: ["directory"]', 'Service: httpd: enabled: matches expectation: [true]', 'Service: httpd: running: matches expectation: [true]', 'Service: firewalld: enabled: matches expectation: [true]', 'Service: firewalld: running: matches expectation: [true]', 'Package: firewalld: installed: matches expectation: [true]', 'Package: httpd: installed: matches expectation: [true]', '', '', 'Total Duration: 0.081s', 'Count: 12, Failed: 0, Skipped: 0'], 'stderr_lines': [], 'failed': False, 'item': '/tmp/test_default.yml', 'ansible_loop_var': 'item'}) => {
+    "msg": [
+        "File: /etc/firewalld/zones/public.xml: exists: matches expectation: [true]",
+        "File: /etc/firewalld/zones/public.xml: contains: matches expectation: [<service name=\"http\"/>]",
+        "File: /var/www/html/index.html: exists: matches expectation: [true]",
+        "File: /var/www/html/index.html: contains: matches expectation: [Managed by Ansible]",
+        "File: /var/www/html: exists: matches expectation: [true]",
+        "File: /var/www/html: filetype: matches expectation: [\"directory\"]",
+        "Service: httpd: enabled: matches expectation: [true]",
+        "Service: httpd: running: matches expectation: [true]",
+        "Service: firewalld: enabled: matches expectation: [true]",
+        "Service: firewalld: running: matches expectation: [true]",
+        "Package: firewalld: installed: matches expectation: [true]",
+        "Package: httpd: installed: matches expectation: [true]",
+        "",
+        "",
+        "Total Duration: 0.081s",
+        "Count: 12, Failed: 0, Skipped: 0"
+    ]
+}
+```
+
+_You can modify the names of the tasks in `verify.yml` file._
+
 ## Running tests on a local k8s cluster
 
 todo
@@ -477,7 +518,17 @@ todo
 
 ## Troubleshooting
 
-todo
+### Error "{'verifier': [{'name': ['unallowed value goss']}]}"
+
+Make sure package `molecule-goss` is installed in virtualenv.
+
+### Error "docker.errors.DockerException: Error while fetching server API version: ('Connection aborted.', ConnectionRefusedError(61, 'Connection refused'))"
+
+Make sure Docker is up and running on machine.
+
+### Linting error "WARNING Listing # violation(s) that are fatal"
+
+Update code to solve linting issues or setup rules in `.ansible-lint` file.
 
 ## Sources and links
 

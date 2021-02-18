@@ -324,9 +324,146 @@ INFO     Verifier completed successfully.
 
 You do not have to install GOSS on your workstation (it has limited support on Win and macOS), but as we are going to run tests in container, just make sure to follow all steps during setup, and you won't be disappointed with the results.
 
+#### Initiate new role 'goss-test'
+
+Create new role template with name `goss-test` and configure it using steps described in the beginning. Tasks, templates and vars should be the same.
+
 #### Setup Molecule for test execution using GOSS
 
+Now we need to specify docker image, test executor and linters. To do that, modify the `molecule.yml` file:
+
+```yaml
+# ~/goss-test/molecule/default/molecule.yml
+---
+dependency:
+  name: galaxy # default dependency manager
+driver:
+  name: docker # to execute tests in docker container
+platforms:
+  - name: centos7
+    image: milcom/centos7-systemd # specific docker image to be used
+    privileged: true
+provisioner:
+  name: ansible # default provisioner
+  log: true # log output needed to see GOSS execution results in log
+verifier:
+  name: goss # tests would be invoked by specified verifier
+lint:
+  | # pipe needed here to provide list of linters to use, only yaml linters needed for goss
+  yamllint .
+  ansible-lint .
+```
+
+Refer to Molecule [documentation](https://molecule.readthedocs.io/en/latest/configuration.html) for detailed description of all available parameters.
+
+#### Install sudo package
+
+Package `sudo` needs to be installed in container to install GOSS.
+Update `converge.yml` file:
+
+```yml
+# ~/goss-test/molecule/default/converge.yml
+---
+- name: Converge
+  hosts: all
+  tasks:
+    - name: Install the package 'sudo'
+      yum:
+        name: sudo
+        state: present
+    - name: "Include goss-test"
+      include_role:
+        name: "goss-test"
+```
+
+#### Install GOSS
+
+Specify GOSS installation steps in `verify.yml` file:
+
+```yml
+# ~/goss-test/molecule/default/verify.yml
+- name: Verify
+  hosts: all
+  become: true
+  vars:
+    goss_version: v0.3.2
+    goss_arch: amd64
+    goss_dst: /usr/local/bin/goss
+    goss_sha256sum: 2f6727375db2ea0f81bee36e2c5be78ab5ab8d5981f632f761b25e4003e190ec
+    goss_url: "https://github.com/aelsabbahy/goss/releases/download/{{ goss_version }}/goss-linux-{{ goss_arch }}"
+    goss_test_directory: /tmp
+    goss_format: documentation
+  tasks:
+    - name: Download and install Goss
+      get_url:
+        url: "{{ goss_url }}"
+        dest: "{{ goss_dst }}"
+        sha256sum: "{{ goss_sha256sum }}"
+        mode: 0755
+      register: download_goss
+      until: download_goss is succeeded
+      retries: 3
+
+    - name: Copy Goss tests to remote
+      copy:
+        src: "{{ item }}"
+        dest: "{{ goss_test_directory }}/{{ item | basename }}"
+      with_fileglob:
+        - "{{ lookup('env', 'MOLECULE_VERIFIER_TEST_DIRECTORY') }}/test_*.yml"
+
+    - name: Register test files
+      shell: "ls {{ goss_test_directory }}/test_*.yml"
+      register: test_files
+
+    - name: Execute Goss tests
+      command: "{{ goss_dst }} -g {{ item }} validate --format {{ goss_format }}"
+      register: test_results
+      with_items: "{{ test_files.stdout_lines }}"
+
+    - name: Display details about the Goss results
+      debug:
+        msg: "{{ item.stdout_lines }}"
+      with_items: "{{ test_results.results }}"
+
+    - name: Fail when tests fail
+      fail:
+        msg: "Goss failed to validate"
+      when: item.rc != 0
+      with_items: "{{ test_results.results }}"
+```
+
 #### Add some tests
+
+Create new folder `tests` inside the `molecule` folder, and add `test_default.yml`:
+
+```yml
+# ~/goss-test/molecule/tests/test_default.yml
+---
+file:
+  "/etc/firewalld/zones/public.xml":
+    exists: true
+    contains: ['<service name="http" />']
+  "/var/www/html/index.html":
+    exists: true
+    contains: ["Managed by Ansible"]
+  "/var/www/html":
+    exists: true
+    filetype: directory
+
+package:
+  httpd:
+    installed: true
+  firewalld:
+    installed: true
+
+service:
+  httpd:
+    enabled: true
+    running: true
+  firewalld:
+    enabled: true
+    running: true
+```
 
 #### Running tests
 
